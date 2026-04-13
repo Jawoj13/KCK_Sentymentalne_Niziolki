@@ -14,4 +14,4 @@
 * Dynamika ćwiczenia może sprawiać problem z wyłapywanie konkretnych klatek ruchu
 * Miecz jako 'przedłużenie ręki'
 * Kontrola braku ruchu (zamach jest błędem)
-* Oznaczenie końca broni tak aby było łatwe do wykrycia (pomarańczowa taśma lub odblask)
+* Oznaczenie końca broni tak aby było łatwe do wykrycia (Żółta taśma izolacyjna na końcu broni)
