@@ -1,6 +1,7 @@
 import time
 import queue
 import cv2
+import sys
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QImage
 from ultralytics import YOLO
@@ -15,7 +16,6 @@ class CameraWorker(QThread):
         self._is_running = True
 
     def _connect(self):
-        import sys
         if isinstance(self.stream_url, int):
             if sys.platform.startswith('win'):
                 backend = cv2.CAP_DSHOW
@@ -90,7 +90,8 @@ class SyncInferenceWorker(QThread):
     # Główna pętla sterująca pobieraniem danych z kolejek i synchronizacją czasową.
     def run(self):
         self.model = YOLO("yolov8n-pose.pt")
-        self.model.to(0)
+        if sys.platform.startswith('linux'):
+            self.model.to(0)
         latest_a = None
         latest_b = None
 
