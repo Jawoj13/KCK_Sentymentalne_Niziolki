@@ -36,7 +36,6 @@ class OneEuroFilter:
         dx = (x - self.x_prev) / dt
         edx = self.alpha(self.d_cutoff, dt) * dx + (1.0 - self.alpha(self.d_cutoff, dt)) * self.dx_prev
 
-        # Calculate adaptive cutoff frequency based on velocity magnitude
         velocity_magnitude = torch.norm(edx, dim=-1, keepdim=True)
         cutoff = self.min_cutoff + self.beta * velocity_magnitude
 
