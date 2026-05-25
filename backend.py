@@ -2,9 +2,52 @@ import time
 import queue
 import cv2
 import sys
+import math
+import torch
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtGui import QImage
 from ultralytics import YOLO
+
+
+class OneEuroFilter:
+    def __init__(self, min_cutoff=1.0, beta=0.007, d_cutoff=1.0):
+        self.min_cutoff = min_cutoff
+        self.beta = beta
+        self.d_cutoff = d_cutoff
+        self.x_prev = None
+        self.dx_prev = None
+        self.t_prev = None
+
+    def alpha(self, cutoff, dt):
+        tau = 1.0 / (2 * math.pi * cutoff)
+        return 1.0 / (1.0 + tau / dt)
+
+    def __call__(self, t, x):
+        if self.x_prev is None:
+            self.x_prev = x.clone()
+            self.dx_prev = torch.zeros_like(x)
+            self.t_prev = t
+            return x.clone()
+
+        dt = t - self.t_prev
+        if dt <= 0.0:
+            return x
+
+        dx = (x - self.x_prev) / dt
+        edx = self.alpha(self.d_cutoff, dt) * dx + (1.0 - self.alpha(self.d_cutoff, dt)) * self.dx_prev
+
+        # Calculate adaptive cutoff frequency based on velocity magnitude
+        velocity_magnitude = torch.norm(edx, dim=-1, keepdim=True)
+        cutoff = self.min_cutoff + self.beta * velocity_magnitude
+
+        a = self.alpha(cutoff, dt)
+        x_hat = a * x + (1.0 - a) * self.x_prev
+
+        self.x_prev = x_hat
+        self.dx_prev = edx
+        self.t_prev = t
+
+        return x_hat
 
 # Przechwytuje strumienie wideo z kamery.
 # Wykorzystuje QThread, aby proces dekodowania klatek nie blokował interfejsu użytkownika
@@ -86,6 +129,47 @@ class SyncInferenceWorker(QThread):
         self.model = None
         self.sync_threshold = 0.05
 
+        self.max_track_age = 10
+        self.kpts_history_a = {}
+        self.kpts_history_b = {}
+
+    def _process_and_filter(self, model_instance, frame, timestamp, history_dict):
+        # track() do dostania id obiektu
+        result = model_instance.track(frame, persist=True, verbose=False)[0]
+
+        if result.keypoints is not None and result.boxes is not None and result.boxes.id is not None:
+            current_kpts = result.keypoints.data
+            track_ids = result.boxes.id.int().cpu().tolist()
+            active_ids = set(track_ids)
+
+            keys_to_delete = []
+            for hist_id in history_dict.keys():
+                if hist_id not in active_ids:
+                    history_dict[hist_id]["age"] += 1
+                    if history_dict[hist_id]["age"] > self.max_track_age:
+                        keys_to_delete.append(hist_id)
+
+            for key in keys_to_delete:
+                del history_dict[key]
+
+            smoothed_kpts_list = []
+            for track_id, current_kpt in zip(track_ids, current_kpts):
+                if track_id not in history_dict:
+                    history_dict[track_id] = {
+                        "filter": OneEuroFilter(min_cutoff=0.5, beta=0.01),
+                        "age": 0
+                    }
+
+                filter_instance = history_dict[track_id]["filter"]
+                smoothed_kpt = filter_instance(timestamp, current_kpt.clone())
+                history_dict[track_id]["age"] = 0
+                smoothed_kpts_list.append(smoothed_kpt)
+
+            if smoothed_kpts_list:
+                result.keypoints.data = torch.stack(smoothed_kpts_list)
+
+        return result.plot()
+
     def _np_to_qimage(self, frame):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, channel = frame_rgb.shape
@@ -94,9 +178,12 @@ class SyncInferenceWorker(QThread):
 
     # Główna pętla sterująca pobieraniem danych z kolejek i synchronizacją czasową.
     def run(self):
-        self.model = YOLO("yolov8n-pose.pt")
+        # Dwa modele, jeden dla każdej kamery, (są lightweight nie powinno to być problemem)
+        self.model_a = YOLO("yolov8n-pose.pt")
+        self.model_b = YOLO("yolov8n-pose.pt")
         if sys.platform.startswith('linux'):
-            self.model.to(0)
+            self.model_a.to(0)
+            self.model_b.to(0)
         latest_a = None
         latest_b = None
 
@@ -135,8 +222,8 @@ class SyncInferenceWorker(QThread):
                         latest_b = None
                     continue
 
-                res_a = self.model(frame_a, verbose=False)[0].plot()
-                res_b = self.model(frame_b, verbose=False)[0].plot()
+                res_a = self._process_and_filter(self.model_a, frame_a, time_a, self.kpts_history_a)
+                res_b = self._process_and_filter(self.model_b, frame_b, time_b, self.kpts_history_b)
 
                 # Informacja o opóźnieniu (DEBUG)
                 debug_text = f"Sync Delta: {time_diff:.3f}s"
@@ -151,12 +238,14 @@ class SyncInferenceWorker(QThread):
 
             # Obsługa sytuacji, gdy dostępna jest tylko jedna kamera (podgląd bez synchronizacji).
             elif latest_a is not None:
-                res_a = self.model(latest_a[1], verbose=False)[0].plot()
+                time_a, frame_a = latest_a
+                res_a = self._process_and_filter(self.model_a, frame_a, time_a, self.kpts_history_a)
                 q_img_a = self._np_to_qimage(res_a)
                 latest_a = None
 
             elif latest_b is not None:
-                res_b = self.model(latest_b[1], verbose=False)[0].plot()
+                time_b, frame_b = latest_b
+                res_b = self._process_and_filter(self.model_b, frame_b, time_b, self.kpts_history_b)
                 q_img_b = self._np_to_qimage(res_b)
                 latest_b = None
 
