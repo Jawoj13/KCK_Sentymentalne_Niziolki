@@ -58,7 +58,12 @@ class CameraWorker(QThread):
                         # Próba umieszczenia klatki w kolejce.
                         self.frame_queue.put_nowait((timestamp, frame))
                     except queue.Full:
-                        pass
+                        try:
+                            # Odrzucenie najstarszej klatki (powinno pomóc w zapobieganiu opóźnieniom, wymusza przetwarzanie najnowzsych klatek poprzez odrzucenie starszych)
+                            self.frame_queue.get_nowait()
+                            self.frame_queue.put_nowait((timestamp, frame))
+                        except queue.Empty:
+                            pass
                 else:
                     break
 
@@ -69,7 +74,7 @@ class CameraWorker(QThread):
         self._is_running = False
         self.wait()
 
-# Klasa przetwarzająca,msynchronizuje obrazy z dwóch źródeł i wykonuje detekcję YOLO.
+# Klasa przetwarzająca, synchronizuje obrazy z dwóch źródeł i wykonuje detekcję YOLO.
 class SyncInferenceWorker(QThread):
     frames_ready = pyqtSignal(QImage, QImage)
 
