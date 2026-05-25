@@ -178,7 +178,6 @@ class SyncInferenceWorker(QThread):
 
     # Główna pętla sterująca pobieraniem danych z kolejek i synchronizacją czasową.
     def run(self):
-        # Dwa modele, jeden dla każdej kamery, (są lightweight nie powinno to być problemem)
         self.model_a = YOLO("yolov8n-pose.pt")
         self.model_b = YOLO("yolov8n-pose.pt")
         if sys.platform.startswith('linux'):
