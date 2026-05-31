@@ -3,3 +3,4 @@ yolov8n-pose.pt
 __pycache__
 .venv
 references/pojedyncze
+references/segmenty
