@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QApplication
 from backend import CameraWorker, SyncInferenceWorker
 from ui import MainWindow
 
-VIDEO_SOURCE = "/home/arczi/Projects/ProjektJugger/KCK_Sentymentalne_Niziolki/references/pojedyncze/3/pełne/pelne4b.mp4"
+VIDEO_SOURCE = "/home/arczi/Projects/ProjektJugger/KCK_Sentymentalne_Niziolki/references/segmenty/3/bez_kroki_3b.mp4"
 
 
 # VIDEO_SOURCE = 0
@@ -24,8 +24,8 @@ class AppController:
 		self.inference_worker = SyncInferenceWorker(
 			self.queue_a,
 			self.queue_b,
-			exercise_type="full",
-			target_repetitions=1,
+			exercise_type="arms_only",
+			target_repetitions=5,
 			dominant_side="right",
 			model_path="yolov8n-pose.pt",
 		)

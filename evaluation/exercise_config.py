@@ -40,6 +40,10 @@ EXERCISE_CONFIG = {
 			"stillness_frames": 4,
 			"min_duration_sec": 0.25,
 			"max_duration_sec": 3.0,
+			"post_peak_enabled": True,
+			"post_peak_frames": 8,
+			"post_peak_drop_ratio": 0.35,
+			"post_peak_min_duration_sec": 0.45,
 		},
 	},
 	"step_only": {
@@ -69,6 +73,10 @@ EXERCISE_CONFIG = {
 			"stillness_frames": 6,
 			"min_duration_sec": 0.45,
 			"max_duration_sec": 5.0,
+			"post_peak_enabled": True,
+			"post_peak_frames": 10,
+			"post_peak_drop_ratio": 0.30,
+			"post_peak_min_duration_sec": 0.75,
 		},
 	},
 	"full": {
@@ -98,6 +106,10 @@ EXERCISE_CONFIG = {
 			"stillness_frames": 6,
 			"min_duration_sec": 0.55,
 			"max_duration_sec": 6.0,
+			"post_peak_enabled": True,
+			"post_peak_frames": 14,
+			"post_peak_drop_ratio": 0.25,
+			"post_peak_min_duration_sec": 1.10,
 		},
 	},
 }

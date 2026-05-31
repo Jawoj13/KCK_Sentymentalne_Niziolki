@@ -10,6 +10,10 @@ MIN_TOTAL_MOTION = 0.08
 START_CONFIRMATION_FRAMES = 1
 MOTION_DEADZONE = 0.02
 
+DEFAULT_POST_PEAK_FRAMES = 10
+DEFAULT_POST_PEAK_DROP_RATIO = 0.30
+DEFAULT_POST_PEAK_MIN_DURATION_SEC = 0.75
+
 
 class RepetitionSegmenter:
 	def __init__(self, exercise_type, dominant_side="left", config=None):
@@ -28,6 +32,7 @@ class RepetitionSegmenter:
 		self.finish_reason = None
 		self.start_confirmation_count = 0
 		self.peak_motion_signal = 0.0
+		self.frames_after_peak = 0
 
 	def compute_motion_signal(self, side_features):
 		if not side_features:
@@ -68,7 +73,12 @@ class RepetitionSegmenter:
 			return None
 
 		signal = self.compute_motion_signal(side_features)
-		self.peak_motion_signal = max(self.peak_motion_signal, signal)
+
+		if signal >= self.peak_motion_signal:
+			self.peak_motion_signal = signal
+			self.frames_after_peak = 0
+		else:
+			self.frames_after_peak += 1
 
 		if self.state == STATE_IDLE:
 			if signal >= self.segmenter_config["motion_start_threshold"]:
@@ -99,6 +109,28 @@ class RepetitionSegmenter:
 		if duration >= self.segmenter_config["min_duration_sec"]:
 			if self.stillness_count >= self.segmenter_config["stillness_frames"]:
 				return self._finish(timestamp, "stillness")
+
+			post_peak_enabled = self.segmenter_config.get("post_peak_enabled", True)
+			post_peak_frames = self.segmenter_config.get("post_peak_frames", DEFAULT_POST_PEAK_FRAMES)
+			post_peak_drop_ratio = self.segmenter_config.get("post_peak_drop_ratio", DEFAULT_POST_PEAK_DROP_RATIO)
+			post_peak_min_duration = self.segmenter_config.get(
+				"post_peak_min_duration_sec",
+				DEFAULT_POST_PEAK_MIN_DURATION_SEC,
+			)
+
+			has_clear_peak = self.peak_motion_signal >= self.segmenter_config["motion_start_threshold"]
+			has_enough_frames_after_peak = self.frames_after_peak >= post_peak_frames
+			has_dropped_after_peak = signal <= self.peak_motion_signal * post_peak_drop_ratio
+			has_enough_duration_for_post_peak = duration >= post_peak_min_duration
+
+			if (
+					post_peak_enabled
+					and has_clear_peak
+					and has_enough_frames_after_peak
+					and has_dropped_after_peak
+					and has_enough_duration_for_post_peak
+			):
+				return self._finish(timestamp, "post_peak")
 
 		return None
 
