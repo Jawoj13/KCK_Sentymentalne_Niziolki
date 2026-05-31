@@ -25,8 +25,8 @@ class AppController:
 			self.queue_a,
 			self.queue_b,
 			exercise_type="full",
-			target_repetitions=5,
-			dominant_side="left",
+			target_repetitions=1,
+			dominant_side="right",
 			model_path="yolov8n-pose.pt",
 		)
 

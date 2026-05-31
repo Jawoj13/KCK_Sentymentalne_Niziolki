@@ -11,7 +11,8 @@ class MainWindow(QWidget):
 	def __init__(self):
 		super().__init__()
 		self.setWindowTitle("Trener Jugger")
-		self.resize(1280, 720)  # rozmiar okna startowego
+		self.resize(1920, 1080)  # rozmiar okna startowego
+		self.setMinimumSize(1280, 720)
 
 		# --- WIDŻET STOSOWY (QStackedWidget) ---
 		self.stacked_widget = QStackedWidget()
@@ -72,8 +73,8 @@ class MainWindow(QWidget):
 		self.label_a = QLabel("Kamera: Laptop")
 		self.label_b = QLabel("Kamera: Telefon (Oczekiwanie...)")
 
-		self.video_preview_width = 560
-		self.video_preview_height = 420
+		self.video_preview_width = 480
+		self.video_preview_height = 360
 
 		for label in (self.label_a, self.label_b):
 			label.setAlignment(Qt.AlignCenter)
@@ -85,15 +86,51 @@ class MainWindow(QWidget):
 
 		self.status_banner = QLabel("STATUS: Gotowy do treningu")
 		self.status_banner.setAlignment(Qt.AlignCenter)
-		self.status_banner.setWordWrap(True)
-		self.status_banner.setMinimumHeight(70)
+		self.status_banner.setFixedHeight(48)
 		self.status_banner.setStyleSheet(
-			"font-size: 20px; font-weight: bold; padding: 10px; background-color: #2ecc71; color: black;")
+			"font-size: 18px; font-weight: bold; padding: 8px; background-color: #2ecc71; color: black;"
+		)
 		video_area_layout.addWidget(self.status_banner)
 
 		# --- PRAWA STRONA: PANEL KOMUNIKATÓW ---
 		control_panel_layout = QVBoxLayout()
 		control_panel_layout.setAlignment(Qt.AlignTop)
+
+		debug_group = QGroupBox("Debug segmentera")
+		debug_vbox = QVBoxLayout()
+
+		self.debug_console = QTextEdit()
+		self.debug_console.setReadOnly(True)
+		self.debug_console.setMinimumHeight(170)
+		self.debug_console.setMaximumHeight(230)
+		self.debug_console.setLineWrapMode(QTextEdit.WidgetWidth)
+		self.debug_console.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.debug_console.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+		self.debug_console.setStyleSheet(
+			"font-family: monospace; font-size: 12px; background-color: #111; color: #00ff88;"
+		)
+
+		debug_vbox.addWidget(self.debug_console)
+		debug_group.setLayout(debug_vbox)
+
+		control_panel_layout.addWidget(debug_group)
+		result_group = QGroupBox("Szczegóły ostatniego powtórzenia")
+		result_vbox = QVBoxLayout()
+
+		self.result_details_console = QTextEdit()
+		self.result_details_console.setReadOnly(True)
+		self.result_details_console.setMinimumHeight(210)
+		self.result_details_console.setLineWrapMode(QTextEdit.WidgetWidth)
+		self.result_details_console.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.result_details_console.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+		self.result_details_console.setPlaceholderText("Tutaj pojawią się szczegóły po wykryciu powtórzenia.")
+		self.result_details_console.setStyleSheet(
+			"font-family: monospace; font-size: 12px; background-color: #1f2933; color: #f5f5f5;"
+		)
+
+		result_vbox.addWidget(self.result_details_console)
+		result_group.setLayout(result_vbox)
+		control_panel_layout.addWidget(result_group)
 
 		logs_group = QGroupBox("Komunikaty systemu (Asystent)")
 		logs_vbox = QVBoxLayout()
@@ -112,8 +149,13 @@ class MainWindow(QWidget):
 		self.btn_back_from_train.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
 		control_panel_layout.addWidget(self.btn_back_from_train)
 
-		training_layout.addLayout(video_area_layout, stretch=3)
-		training_layout.addLayout(control_panel_layout, stretch=1)
+		control_panel_widget = QWidget()
+		control_panel_widget.setMinimumWidth(430)
+		control_panel_widget.setMaximumWidth(560)
+		control_panel_widget.setLayout(control_panel_layout)
+
+		training_layout.addLayout(video_area_layout, stretch=1)
+		training_layout.addWidget(control_panel_widget)
 
 		self.training_page.setLayout(training_layout)
 
@@ -214,7 +256,7 @@ class MainWindow(QWidget):
 			scaled_b = pixmap_b.scaled(
 				self.video_preview_width,
 				self.video_preview_height,
-				Qt.KeepAspectRatio,
+				Qt.KeepAspectRatioByExpanding,
 				Qt.SmoothTransformation,
 			)
 			self.label_b.setPixmap(scaled_b)
@@ -223,6 +265,10 @@ class MainWindow(QWidget):
 		if not result:
 			return
 
+		if hasattr(self, "result_details_console"):
+			self.result_details_console.setPlainText(self.format_repetition_details(result))
+
+		exercise_type = result.get("exercise_type", "unknown")
 		score = result.get("score", "N/A")
 		confidence = result.get("confidence", "N/A")
 		main_feedback = result.get("main_feedback") or result.get("feedback")
@@ -236,6 +282,7 @@ class MainWindow(QWidget):
 			feedback_code = None
 
 		message_lines = [
+			f"Exercise: {exercise_type}",
 			f"Score: {score}",
 			f"Confidence: {confidence}",
 			f"Main feedback: {feedback_message}",
@@ -246,5 +293,76 @@ class MainWindow(QWidget):
 
 		message_lines.append("Component scores:")
 
+		if component_scores:
+			for name, value in component_scores.items():
+				message_lines.append(f"  {name}: {value}")
+		else:
+			message_lines.append("  Brak component_scores")
+
+		self.log_console.append("\n".join(message_lines))
+		self.log_console.append("")
+
 	def update_debug_status(self, text):
-		self.status_banner.setText(text)
+		self.status_banner.setText("STATUS: Analiza aktywna")
+		self.debug_console.setPlainText(text)
+
+	def format_repetition_details(self, result):
+		if not result:
+			return "Brak wyniku."
+
+		exercise_type = result.get("exercise_type", "unknown")
+		score = result.get("score", "N/A")
+		confidence = result.get("confidence", "N/A")
+		main_feedback = result.get("main_feedback")
+		component_scores = result.get("component_scores", {})
+		errors = result.get("errors", [])
+
+		lines = [
+			"OSTATNIE POWTÓRZENIE",
+			"",
+			f"exercise_type: {exercise_type}",
+			f"score: {score}",
+			f"confidence: {confidence}",
+			"",
+			"GŁÓWNY FEEDBACK",
+		]
+
+		if isinstance(main_feedback, dict):
+			lines.extend([
+				f"code: {main_feedback.get('code', 'N/A')}",
+				f"message: {main_feedback.get('message', 'Brak informacji zwrotnej')}",
+				f"camera: {main_feedback.get('camera', 'N/A')}",
+				f"feedback_score: {main_feedback.get('score', 'N/A')}",
+			])
+		else:
+			lines.append(str(main_feedback or "Brak informacji zwrotnej"))
+
+		lines.extend([
+			"",
+			"COMPONENT SCORES",
+		])
+
+		if component_scores:
+			for name, value in component_scores.items():
+				lines.append(f"{name}: {value}")
+		else:
+			lines.append("Brak component_scores")
+
+		lines.extend([
+			"",
+			"ERRORS",
+		])
+
+		if errors:
+			for index, error in enumerate(errors, start=1):
+				lines.extend([
+					f"{index}. code: {error.get('code', 'N/A')}",
+					f"   message: {error.get('message', 'Brak komunikatu')}",
+					f"   severity: {error.get('severity', 'N/A')}",
+					f"   priority: {error.get('priority', 'N/A')}",
+					f"   camera: {error.get('camera', 'N/A')}",
+				])
+		else:
+			lines.append("Brak błędów wykrytych w tym powtórzeniu.")
+
+		return "\n".join(lines)

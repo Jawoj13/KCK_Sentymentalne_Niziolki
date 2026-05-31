@@ -176,22 +176,28 @@ class EvaluationController:
 
 	def get_debug_text(self):
 		if not self.last_side_features:
-			return f"exercise_type={self.exercise_type} | no side features"
+			return (
+				f"exercise_type: {self.exercise_type}\n"
+				"No side features detected"
+			)
 
 		side_features = self.last_side_features
 		motion_signal = self.segmenter.compute_motion_signal(side_features)
 
 		return (
-			f"exercise={self.exercise_type} | "
-			f"state={self.segmenter.state} | "
-			f"event={self.last_event} | "
-			f"signal={motion_signal:.3f} | "
-			f"frames={len(self.segmenter.records)} | "
-			f"stillness={self.segmenter.stillness_count} | "
-			f"confidence={side_features.get('feature_confidence', 0.0):.2f} | "
-			f"wrist_velocity={side_features.get('front_wrist_velocity', 0.0):.3f} | "
-			f"ankle_velocity={side_features.get('front_ankle_velocity', 0.0):.3f} | "
-			f"extension_change={side_features.get('wrist_extension_change', 0.0):.3f}"
+			f"exercise_type: {self.exercise_type}\n"
+			f"segmenter_state: {self.segmenter.state}\n"
+			f"segmenter_event: {self.last_event}\n"
+			f"motion_signal: {motion_signal:.3f}\n"
+			f"stillness_frames: {self.segmenter.stillness_count}\n"
+			f"recorded_frames: {len(self.segmenter.records)}\n"
+			f"feature_confidence: {side_features.get('feature_confidence', 0.0):.2f}\n"
+			f"confidence_ok: {side_features.get('confidence_ok')}\n"
+			f"front_wrist_velocity: {side_features.get('front_wrist_velocity', 0.0):.3f}\n"
+			f"front_ankle_velocity: {side_features.get('front_ankle_velocity', 0.0):.3f}\n"
+			f"wrist_extension_change: {side_features.get('wrist_extension_change', 0.0):.3f}\n"
+			f"wrist_extension: {(side_features.get('wrist_extension') or 0.0):.3f}\n"
+			f"front_ankle_displacement: {side_features.get('front_ankle_displacement', 0.0):.3f}\n"
 		)
 
 
