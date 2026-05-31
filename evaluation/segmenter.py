@@ -89,7 +89,7 @@ class RepetitionSegmenter:
 		if signal <= self.segmenter_config["stillness_threshold"]:
 			self.stillness_count += 1
 		else:
-			self.stillness_count = 0
+			self.stillness_count = max(0, self.stillness_count - 1)
 
 		duration = timestamp - self.start_time
 

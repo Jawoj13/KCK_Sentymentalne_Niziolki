@@ -1,6 +1,7 @@
 # Debug segmentera
 
-Ten plik opisuje pola wyświetlane w panelu debug aplikacji. Służy do szybkiego sprawdzenia, czy system widzi ruch, czy segmenter wykrywa początek powtórzenia oraz czy potrafi zakończyć powtórzenie.
+Ten plik opisuje pola wyświetlane w panelu debug aplikacji. Służy do szybkiego sprawdzenia, czy system widzi ruch, czy
+segmenter wykrywa początek powtórzenia oraz czy potrafi zakończyć powtórzenie.
 
 Przykładowy debug:
 
@@ -64,7 +65,8 @@ Dla `full` segmenter patrzy na rękę i nogę jednocześnie.
 motion_signal = 0.5 * front_wrist_velocity + 0.5 * front_ankle_velocity
 ```
 
-Jeżeli użytkownik rusza ręką, ale `exercise_type` jest ustawiony na `step_only`, system może nie wykryć powtórzenia, bo czeka na ruch nogi.
+Jeżeli użytkownik rusza ręką, ale `exercise_type` jest ustawiony na `step_only`, system może nie wykryć powtórzenia, bo
+czeka na ruch nogi.
 
 ---
 
@@ -149,13 +151,15 @@ Brak nowego zdarzenia. Segmenter nadal czeka albo kontynuuje zapis.
 
 Wykryto początek powtórzenia.
 
-Jeżeli widzisz `started`, ale później nie pojawia się wynik, to znaczy, że segmenter startuje, ale nie kończy powtórzenia.
+Jeżeli widzisz `started`, ale później nie pojawia się wynik, to znaczy, że segmenter startuje, ale nie kończy
+powtórzenia.
 
 ### `finished`
 
 Wykryto koniec powtórzenia. W tym momencie powinien zostać wygenerowany wynik.
 
-Jeżeli `finished` pojawia się w debug, ale wynik nie trafia do UI, problem jest prawdopodobnie w backendzie, emitowaniu sygnału albo obsłudze `evaluation_ready`.
+Jeżeli `finished` pojawia się w debug, ale wynik nie trafia do UI, problem jest prawdopodobnie w backendzie, emitowaniu
+sygnału albo obsłudze `evaluation_ready`.
 
 ---
 
@@ -238,7 +242,8 @@ Przykład:
 
 oznacza, że system potrzebuje 4 spokojnych klatek z rzędu, żeby uznać powtórzenie za zakończone.
 
-Jeżeli `stillness_frames` cały czas wynosi `0`, mimo że użytkownik już się zatrzymał, to prawdopodobnie YOLO generuje jitter.
+Jeżeli `stillness_frames` cały czas wynosi `0`, mimo że użytkownik już się zatrzymał, to prawdopodobnie YOLO generuje
+jitter.
 
 Możliwe rozwiązania:
 
@@ -373,7 +378,8 @@ front_wrist_velocity: 0.063
 
 Oznacza prędkość nadgarstka ręki prowadzącej.
 
-Wartość jest normalizowana przez skalę ciała, więc nie powinna mocno zależeć od tego, czy użytkownik stoi bliżej lub dalej od kamery.
+Wartość jest normalizowana przez skalę ciała, więc nie powinna mocno zależeć od tego, czy użytkownik stoi bliżej lub
+dalej od kamery.
 
 Najważniejsze dla ćwiczeń:
 
@@ -516,7 +522,8 @@ Uwaga: to nie jest to samo co `front_elbow_angle`.
 - `wrist_extension` pomaga znaleźć moment maksymalnego wyciągnięcia ręki.
 - `front_elbow_angle` mówi, czy łokieć jest dobrze wyprostowany.
 
-W scoringu jakości wyprostu ważniejszy jest kąt łokcia, ale `wrist_extension` jest przydatne do segmentacji i wyboru klatki końcowej.
+W scoringu jakości wyprostu ważniejszy jest kąt łokcia, ale `wrist_extension` jest przydatne do segmentacji i wyboru
+klatki końcowej.
 
 ---
 
@@ -678,7 +685,7 @@ Poprawka:
 W `main.py` ustaw właściwe ćwiczenie:
 
 ```python
-exercise_type="arms_only"
+exercise_type = "arms_only"
 ```
 
 ---
@@ -699,11 +706,11 @@ Dla `arms_only`:
 
 ```python
 "segmenter": {
-    "motion_start_threshold": 0.02,
-    "stillness_threshold": 0.025,
-    "stillness_frames": 3,
-    "min_duration_sec": 0.15,
-    "max_duration_sec": 4.0,
+	"motion_start_threshold": 0.02,
+	"stillness_threshold": 0.025,
+	"stillness_frames": 3,
+	"min_duration_sec": 0.15,
+	"max_duration_sec": 4.0,
 }
 ```
 
@@ -715,7 +722,8 @@ Docelowo te progi trzeba zaostrzyć po potwierdzeniu, że cały pipeline działa
 
 Najpierw sprawdzaj segmentację, dopiero potem scoring.
 
-Jeżeli segmenter nie wykrywa poprawnie `started` i `finished`, wynik oceny nie ma znaczenia, bo scoring dostaje złą sekwencję albo nie dostaje jej wcale.
+Jeżeli segmenter nie wykrywa poprawnie `started` i `finished`, wynik oceny nie ma znaczenia, bo scoring dostaje złą
+sekwencję albo nie dostaje jej wcale.
 
 Kolejność diagnozy:
 

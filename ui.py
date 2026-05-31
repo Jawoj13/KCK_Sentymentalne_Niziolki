@@ -97,14 +97,17 @@ class MainWindow(QWidget):
 		control_panel_layout.setAlignment(Qt.AlignTop)
 
 		debug_group = QGroupBox("Debug segmentera")
+		debug_group.setMinimumHeight(335)
+		debug_group.setMaximumHeight(360)
+
 		debug_vbox = QVBoxLayout()
+		debug_vbox.setContentsMargins(8, 18, 8, 8)
 
 		self.debug_console = QTextEdit()
 		self.debug_console.setReadOnly(True)
-		self.debug_console.setMinimumHeight(170)
-		self.debug_console.setMaximumHeight(230)
-		self.debug_console.setLineWrapMode(QTextEdit.WidgetWidth)
-		self.debug_console.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.debug_console.setFixedHeight(285)
+		self.debug_console.setLineWrapMode(QTextEdit.NoWrap)
+		self.debug_console.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 		self.debug_console.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 		self.debug_console.setStyleSheet(
 			"font-family: monospace; font-size: 12px; background-color: #111; color: #00ff88;"
@@ -150,8 +153,8 @@ class MainWindow(QWidget):
 		control_panel_layout.addWidget(self.btn_back_from_train)
 
 		control_panel_widget = QWidget()
-		control_panel_widget.setMinimumWidth(430)
-		control_panel_widget.setMaximumWidth(560)
+		control_panel_widget.setMinimumWidth(500)
+		control_panel_widget.setMaximumWidth(620)
 		control_panel_widget.setLayout(control_panel_layout)
 
 		training_layout.addLayout(video_area_layout, stretch=1)
@@ -317,12 +320,19 @@ class MainWindow(QWidget):
 		component_scores = result.get("component_scores", {})
 		errors = result.get("errors", [])
 
+		frame_count = result.get("frame_count", "N/A")
+		front_frame_count = result.get("front_frame_count", "N/A")
+		finish_reason = result.get("finish_reason", "N/A")
+
 		lines = [
 			"OSTATNIE POWTÓRZENIE",
 			"",
 			f"exercise_type: {exercise_type}",
 			f"score: {score}",
 			f"confidence: {confidence}",
+			f"frame_count: {frame_count}",
+			f"front_frame_count: {front_frame_count}",
+			f"finish_reason: {finish_reason}",
 			"",
 			"GŁÓWNY FEEDBACK",
 		]

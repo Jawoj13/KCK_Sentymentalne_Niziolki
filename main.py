@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QApplication
 from backend import CameraWorker, SyncInferenceWorker
 from ui import MainWindow
 
-VIDEO_SOURCE = "/home/arczi/Projects/ProjektJugger/KCK_Sentymentalne_Niziolki/references/pojedyncze/3/pełne/pelne6b.mp4"
+VIDEO_SOURCE = "/home/arczi/Projects/ProjektJugger/KCK_Sentymentalne_Niziolki/references/pojedyncze/3/pełne/pelne4b.mp4"
 
 
 # VIDEO_SOURCE = 0

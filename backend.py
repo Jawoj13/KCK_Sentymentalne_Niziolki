@@ -145,6 +145,10 @@ class EvaluationController:
 			repetition["dominant_side"],
 		)
 
+		result["frame_count"] = len(repetition["side_sequence"])
+		result["front_frame_count"] = len(repetition["front_sequence"])
+		result["finish_reason"] = repetition.get("finish_reason")
+
 		self.results.append(result)
 		self.segmenter.reset()
 		self.side_extractor.reset()
