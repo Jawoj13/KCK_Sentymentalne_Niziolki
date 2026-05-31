@@ -38,11 +38,19 @@ def make_step_frame(ankle_x, timestamp=0.0):
 
 
 def run_segmenter(exercise_type, side_features, front_features=None):
-	s = RepetitionSegmenter(exercise_type, dominant_side="left");
+	s = RepetitionSegmenter(exercise_type, dominant_side="left")
 	event = None
+
 	for i, item in enumerate(side_features):
-		event = s.update(item["timestamp"], item,
-		                 front_features[i] if front_features and i < len(front_features) else None)
+		event = s.update(
+			item["timestamp"],
+			item,
+			front_features[i] if front_features and i < len(front_features) else None,
+		)
+
+		if event == "finished":
+			break
+
 	return event, s
 
 

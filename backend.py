@@ -113,6 +113,8 @@ class EvaluationController:
 		self.side_extractor = FeatureStreamExtractor(CAMERA_SIDE, dominant_side=dominant_side)
 		self.front_extractor = FeatureStreamExtractor(CAMERA_FRONT, dominant_side=dominant_side)
 		self.results = []
+		self.last_side_features = None
+		self.last_event = None
 
 	def reset(self):
 		self.segmenter.reset()
@@ -124,16 +126,25 @@ class EvaluationController:
 		side_features = self.side_extractor.update(side_keypoints, timestamp) if side_keypoints is not None else None
 		front_features = self.front_extractor.update(front_keypoints,
 		                                             timestamp) if front_keypoints is not None else None
+		self.last_side_features = side_features
+
 		event = self.segmenter.update(timestamp, side_features, front_features)
+		self.last_event = event
+
 		if event != "finished":
 			return None
 		repetition = self.segmenter.get_repetition()
+
+		if repetition is None:
+			return None
+
 		result = evaluate_repetition(
 			repetition["exercise_type"],
 			repetition["side_sequence"],
 			repetition["front_sequence"],
 			repetition["dominant_side"],
 		)
+
 		self.results.append(result)
 		self.segmenter.reset()
 		self.side_extractor.reset()
@@ -163,6 +174,26 @@ class EvaluationController:
 			"results": list(self.results),
 		}
 
+	def get_debug_text(self):
+		if not self.last_side_features:
+			return f"exercise_type={self.exercise_type} | no side features"
+
+		side_features = self.last_side_features
+		motion_signal = self.segmenter.compute_motion_signal(side_features)
+
+		return (
+			f"exercise={self.exercise_type} | "
+			f"state={self.segmenter.state} | "
+			f"event={self.last_event} | "
+			f"signal={motion_signal:.3f} | "
+			f"frames={len(self.segmenter.records)} | "
+			f"stillness={self.segmenter.stillness_count} | "
+			f"confidence={side_features.get('feature_confidence', 0.0):.2f} | "
+			f"wrist_velocity={side_features.get('front_wrist_velocity', 0.0):.3f} | "
+			f"ankle_velocity={side_features.get('front_ankle_velocity', 0.0):.3f} | "
+			f"extension_change={side_features.get('wrist_extension_change', 0.0):.3f}"
+		)
+
 
 class CameraWorker(QThread):
 	def __init__(self, stream_url, frame_queue):
@@ -173,20 +204,45 @@ class CameraWorker(QThread):
 
 	def run(self):
 		capture = cv2.VideoCapture(self.stream_url)
+		is_file_source = isinstance(self.stream_url, str)
+
+		fps = capture.get(cv2.CAP_PROP_FPS)
+		if fps is None or fps <= 1:
+			fps = 30.0
+
+		frame_delay = 1.0 / fps if is_file_source else 0.0
+
 		while self._is_running:
+			frame_start_time = time.time()
+
 			ok, frame = capture.read()
+
 			if not ok:
+				if is_file_source:
+					capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+					time.sleep(frame_delay)
+					continue
+
 				time.sleep(0.02)
 				continue
+
 			if self.frame_queue.full():
 				try:
 					self.frame_queue.get_nowait()
 				except queue.Empty:
 					pass
+
 			try:
 				self.frame_queue.put_nowait((time.time(), frame))
 			except queue.Full:
 				pass
+
+			if is_file_source:
+				elapsed = time.time() - frame_start_time
+				sleep_time = frame_delay - elapsed
+				if sleep_time > 0:
+					time.sleep(sleep_time)
+
 		capture.release()
 
 	def stop(self):
@@ -197,6 +253,7 @@ class CameraWorker(QThread):
 class SyncInferenceWorker(QThread):
 	frames_ready = pyqtSignal(QImage, QImage)
 	evaluation_ready = pyqtSignal(object)
+	debug_ready = pyqtSignal(str)
 
 	def __init__(self, queue_a, queue_b, exercise_type="arms_only", target_repetitions=10, dominant_side="left",
 	             model_path="yolov8n-pose.pt"):
@@ -246,8 +303,13 @@ class SyncInferenceWorker(QThread):
 				front_keypoints,
 			)
 
+			debug_text = self.evaluation.get_debug_text()
+			if debug_text:
+				self.debug_ready.emit(debug_text)
+
 			if result is not None:
 				self.evaluation_ready.emit(result)
+
 			self.frames_ready.emit(self._to_qimage(frame_a), self._to_qimage(frame_b))
 
 	def stop(self):

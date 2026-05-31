@@ -72,10 +72,12 @@ class MainWindow(QWidget):
 		self.label_a = QLabel("Kamera: Laptop")
 		self.label_b = QLabel("Kamera: Telefon (Oczekiwanie...)")
 
+		self.video_preview_width = 560
+		self.video_preview_height = 420
+
 		for label in (self.label_a, self.label_b):
 			label.setAlignment(Qt.AlignCenter)
-			label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-			label.setMinimumSize(450, 350)
+			label.setFixedSize(self.video_preview_width, self.video_preview_height)
 			label.setStyleSheet("background-color: #000; color: #fff; border: 1px solid #555;")
 			cameras_layout.addWidget(label)
 
@@ -83,6 +85,8 @@ class MainWindow(QWidget):
 
 		self.status_banner = QLabel("STATUS: Gotowy do treningu")
 		self.status_banner.setAlignment(Qt.AlignCenter)
+		self.status_banner.setWordWrap(True)
+		self.status_banner.setMinimumHeight(70)
 		self.status_banner.setStyleSheet(
 			"font-size: 20px; font-weight: bold; padding: 10px; background-color: #2ecc71; color: black;")
 		video_area_layout.addWidget(self.status_banner)
@@ -195,14 +199,24 @@ class MainWindow(QWidget):
 
 	# METODA REFRESHUJĄCA OBRAZ
 	def update_both_labels(self, q_img_a, q_img_b):
-		if not q_img_a.isNull() and self.label_a.width() > 0 and self.label_a.height() > 0:
+		if not q_img_a.isNull():
 			pixmap_a = QPixmap.fromImage(q_img_a)
-			scaled_a = pixmap_a.scaled(self.label_a.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+			scaled_a = pixmap_a.scaled(
+				self.video_preview_width,
+				self.video_preview_height,
+				Qt.KeepAspectRatioByExpanding,
+				Qt.SmoothTransformation,
+			)
 			self.label_a.setPixmap(scaled_a)
 
-		if not q_img_b.isNull() and self.label_b.width() > 0 and self.label_b.height() > 0:
+		if not q_img_b.isNull():
 			pixmap_b = QPixmap.fromImage(q_img_b)
-			scaled_b = pixmap_b.scaled(self.label_b.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+			scaled_b = pixmap_b.scaled(
+				self.video_preview_width,
+				self.video_preview_height,
+				Qt.KeepAspectRatio,
+				Qt.SmoothTransformation,
+			)
 			self.label_b.setPixmap(scaled_b)
 
 	def append_evaluation_result(self, result):
@@ -210,20 +224,27 @@ class MainWindow(QWidget):
 			return
 
 		score = result.get("score", "N/A")
-		main_feedback = result.get("main_feedback") or result.get("feedback") or "Brak informacji zwrotnej"
+		confidence = result.get("confidence", "N/A")
+		main_feedback = result.get("main_feedback") or result.get("feedback")
 		component_scores = result.get("component_scores", {})
+
+		if isinstance(main_feedback, dict):
+			feedback_message = main_feedback.get("message", "Brak informacji zwrotnej")
+			feedback_code = main_feedback.get("code", "UNKNOWN")
+		else:
+			feedback_message = main_feedback or "Brak informacji zwrotnej"
+			feedback_code = None
 
 		message_lines = [
 			f"Score: {score}",
-			f"Main feedback: {main_feedback}",
-			"Component scores:"
+			f"Confidence: {confidence}",
+			f"Main feedback: {feedback_message}",
 		]
 
-		if component_scores:
-			for name, value in component_scores.items():
-				message_lines.append(f"  {name}: {value}")
-		else:
-			message_lines.append("  Brak component_scores")
+		if feedback_code:
+			message_lines.append(f"Feedback code: {feedback_code}")
 
-		self.log_console.append("\n".join(message_lines))
-		self.log_console.append("")
+		message_lines.append("Component scores:")
+
+	def update_debug_status(self, text):
+		self.status_banner.setText(text)

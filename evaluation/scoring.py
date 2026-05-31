@@ -42,6 +42,18 @@ def _idxmax(seq, key):
 	return max(range(len(seq)), key=lambda i: seq[i].get(key) if seq[i].get(key) is not None else -999999)
 
 
+def _first_motion_time(seq, key, threshold):
+	for item in seq:
+		value = abs(item.get(key, 0.0) or 0.0)
+		if value >= threshold:
+			return item.get("timestamp")
+	return None
+
+
+def _filter_confident(seq):
+	return [item for item in seq if item.get("confidence_ok", True)]
+
+
 def _avg_conf(*seqs):
 	vals = [x.get("feature_confidence") for s in seqs for x in (s or []) if x.get("feature_confidence") is not None]
 	return sum(vals) / len(vals) if vals else 0.0
@@ -106,13 +118,19 @@ def score_torso_posture(v, th):
 
 
 def evaluate_repetition(exercise_type, side_sequence=None, front_sequence=None, dominant_side="left", config=None):
-	config = config or EXERCISE_CONFIG;
-	side = side_sequence or [];
-	front = front_sequence or []
-	if not side: return _result(exercise_type, {}, {}, [], [], [])
-	th = config[exercise_type]["thresholds"];
-	weights = config[exercise_type]["score_weights"];
+	config = config or EXERCISE_CONFIG
+	side = _filter_confident(side_sequence or [])
+	front = _filter_confident(front_sequence or [])
+
+	if len(side) < 5:
+		errors = []
+		_add(errors, exercise_type, "LOW_CONFIDENCE", 1.0, CAMERA_ANY)
+		return _result(exercise_type, {}, {}, errors, side, front)
+
+	th = config[exercise_type]["thresholds"]
+	weights = config[exercise_type]["score_weights"]
 	errors = []
+
 	if exercise_type == "arms_only":
 		idx = _idxmax(side, "wrist_extension");
 		end = side[idx]
@@ -149,17 +167,62 @@ def evaluate_repetition(exercise_type, side_sequence=None, front_sequence=None, 
 		               {"step_length": step_score, "front_knee_alignment": knee_score, "back_knee_bend": back_score,
 		                "torso_posture": torso, "stance_width": stance, "dtw_reference": DEFAULT_DTW_SCORE}, weights,
 		               errors, side, front)
-	hand = _idxmax(side, "wrist_extension");
-	foot = _idxmax(side, "front_ankle_displacement");
+	hand = _idxmax(side, "wrist_extension")
+	foot = _idxmax(side, "front_ankle_displacement")
 	peak = side[hand]
-	arm = score_elbow_extension(peak.get("front_elbow_angle"));
-	step, _ = score_step_length(side, foot, {"step_good_min": 0.25, "step_good_max": 0.70, "step_too_short": 0.15})
-	sync_ms = abs((side[hand].get("timestamp") or hand) - (side[foot].get("timestamp") or foot)) * 1000
-	sync = 100.0 if sync_ms <= th["sync_excellent_ms"] else 85.0 if sync_ms <= th["sync_ok_ms"] else 60.0 if sync_ms <= \
-	                                                                                                         th[
-																												 "sync_bad_ms"] else 30.0
-	if sync_ms > th["sync_ok_ms"]: _add(errors, exercise_type, "HAND_FOOT_NOT_SYNCED", 0.8, CAMERA_SIDE)
+
+	hand_start_time = _first_motion_time(side, "front_wrist_velocity", 0.05)
+	foot_start_time = _first_motion_time(side, "front_ankle_velocity", 0.05)
+
+	if hand_start_time is not None and foot_start_time is not None:
+		start_delta_ms = (foot_start_time - hand_start_time) * 1000.0
+		if start_delta_ms < -th["foot_starts_too_early_ms"]:
+			_add(errors, exercise_type, "FOOT_STARTS_BEFORE_HAND", 1.0, CAMERA_SIDE)
+
+	arm = score_elbow_extension(peak.get("front_elbow_angle"))
+
+	if (peak.get("front_elbow_angle") or 0.0) < th["front_elbow_good"]:
+		_add(errors, exercise_type, "ARM_NOT_EXTENDED", 1.0, CAMERA_ANY)
+
+	step, _ = score_step_length(
+		side,
+		foot,
+		{"step_good_min": 0.25, "step_good_max": 0.70, "step_too_short": 0.15}
+	)
+
+	hand_time = side[hand].get("timestamp")
+	foot_time = side[foot].get("timestamp")
+
+	if hand_time is None or foot_time is None:
+		sync_ms = abs(hand - foot) * 100.0
+	else:
+		sync_ms = abs(hand_time - foot_time) * 1000.0
+
+	if sync_ms <= th["sync_excellent_ms"]:
+		sync = 100.0
+	elif sync_ms <= th["sync_ok_ms"]:
+		sync = 85.0
+	elif sync_ms <= th["sync_bad_ms"]:
+		sync = 60.0
+	else:
+		sync = 30.0
+
+	if sync_ms > th["sync_ok_ms"]:
+		_add(errors, exercise_type, "HAND_FOOT_NOT_SYNCED", 0.8, CAMERA_SIDE)
+
 	posture = score_torso_posture(side[max(hand, foot)].get("torso_lean_angle"), th)
-	return _result(exercise_type,
-	               {"arm_extension": arm, "step_quality": step, "synchronization": sync, "posture": posture,
-	                "dtw_reference": DEFAULT_DTW_SCORE}, weights, errors, side, front)
+
+	return _result(
+		exercise_type,
+		{
+			"arm_extension": arm,
+			"step_quality": step,
+			"synchronization": sync,
+			"posture": posture,
+			"dtw_reference": DEFAULT_DTW_SCORE,
+		},
+		weights,
+		errors,
+		side,
+		front,
+	)

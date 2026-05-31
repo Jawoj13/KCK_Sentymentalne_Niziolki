@@ -72,16 +72,22 @@ def _dt(prev, curr):
 
 
 def _point_velocity(prev, curr, key, dt, scale):
-	if prev is None or prev.get(key) is None or curr.get(key) is None: return 0.0
-	dx = curr[key][0] - prev[key][0];
+	if prev is None or prev.get(key) is None or curr.get(key) is None:
+		return 0.0
+
+	dx = curr[key][0] - prev[key][0]
 	dy = curr[key][1] - prev[key][1]
-	v = ((dx * dx + dy * dy) ** 0.5) / max(scale, 1e-9) / dt
-	return 0.0 if v < 0.02 else v
+
+	velocity = ((dx * dx + dy * dy) ** 0.5) / max(scale, 1e-9) / dt
+	return 0.0 if velocity < 0.02 else velocity
 
 
 def _value_change(prev, curr, key, dt):
-	if prev is None or prev.get(key) is None or curr.get(key) is None: return 0.0
-	return abs(curr[key] - prev[key]) / dt
+	if prev is None or prev.get(key) is None or curr.get(key) is None:
+		return 0.0
+
+	change = abs(curr[key] - prev[key]) / dt
+	return 0.0 if change < 0.02 else change
 
 
 def _disp(start, curr, scale):
@@ -104,6 +110,7 @@ def add_temporal_features(features):
 		item["front_ankle_displacement"] = _disp(sa, item.get("front_ankle"), scale)
 		item["front_wrist_displacement"] = _disp(sw, item.get("front_wrist"), scale)
 		item["hip_center_displacement"] = _disp(sh, item.get("hip_center"), scale)
+		item["front_ankle_displacement_change"] = _value_change(prev, item, "front_ankle_displacement", dt)
 		prev = item
 	return features
 
@@ -142,5 +149,7 @@ class FeatureStreamExtractor:
 		item["front_ankle_displacement"] = _disp(self.start_ankle, item.get("front_ankle"), scale)
 		item["front_wrist_displacement"] = _disp(self.start_wrist, item.get("front_wrist"), scale)
 		item["hip_center_displacement"] = _disp(self.start_hip, item.get("hip_center"), scale)
+		item["front_ankle_displacement_change"] = _value_change(self.previous_features, item,
+		                                                        "front_ankle_displacement", dt)
 		self.previous_features = item
 		return item
