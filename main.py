@@ -1,59 +1,59 @@
-import sys
 import queue
+import sys
+
 from PyQt5.QtWidgets import QApplication
+
 from backend import CameraWorker, SyncInferenceWorker
 from ui import MainWindow
 
-# Klasa koordynująca pracę interfejsu oraz wątków tła.
+VIDEO_SOURCE = "/home/arczi/Projects/ProjektJugger/KCK_Sentymentalne_Niziolki/references/segmenty/3/bez_kroki_3b.mp4"
+
+
+# VIDEO_SOURCE = 0
+
+
 class AppController:
-    def __init__(self):
-        self.window = MainWindow()
+	def __init__(self):
+		self.window = MainWindow()
 
-        # Inicjalizacja kolejek o małym rozmiarze.
-        # maxsize=2 gwarantuje, że nie przetwarzamy starych klatek, jeśli YOLO zwolni.
-        self.queue_a = queue.Queue(maxsize=2)
-        self.queue_b = queue.Queue(maxsize=2)
+		self.queue_a = queue.Queue(maxsize=2)
+		self.queue_b = queue.Queue(maxsize=2)
 
-        # Uruchomienie wątku zajmującego się rozpoznawaniem.
-        self.inference_worker = SyncInferenceWorker(self.queue_a, self.queue_b)
-        # Połączenie sygnału z wątku YOLO do funkcji odświeżającej okno UI.
-        self.inference_worker.frames_ready.connect(self.window.update_both_labels)
-        self.inference_worker.start()
+		self.camera_a = CameraWorker(VIDEO_SOURCE, self.queue_a)
 
-        # Kamera laptopa
-        self.worker_a = CameraWorker(0, self.queue_a)
-        self.worker_a.start()
+		self.inference_worker = SyncInferenceWorker(
+			self.queue_a,
+			self.queue_b,
+			exercise_type="arms_only",
+			target_repetitions=5,
+			dominant_side="right",
+			model_path="yolov8n-pose.pt",
+		)
 
-        # Kamera z telefonu
-        self.worker_b = None
+		self.inference_worker.frames_ready.connect(self.window.update_both_labels)
+		self.inference_worker.evaluation_ready.connect(self.window.append_evaluation_result)
+		self.inference_worker.debug_ready.connect(self.window.update_debug_status)
 
-        self.window.connect_btn.clicked.connect(self.connect_ip_camera)
+	def start(self):
+		self.camera_a.start()
+		self.inference_worker.start()
 
-    # Metoda obsługująca dynamiczne łączenie się z nowym strumieniem wideo.
-    def connect_ip_camera(self):
-        if self.worker_b is not None:
-            self.worker_b.stop()
-
-        stream_url = self.window.ip_input.text()
-
-        self.worker_b = CameraWorker(stream_url, self.queue_b)
-        self.worker_b.start()
-
-    def cleanup(self):
-        self.worker_a.stop()
-        if self.worker_b is not None:
-            self.worker_b.stop()
-        self.inference_worker.stop()
+	def stop(self):
+		self.camera_a.stop()
+		self.inference_worker.stop()
 
 
 def main():
-    app = QApplication(sys.argv)
-    controller = AppController()
-    controller.window.show()
+	app = QApplication(sys.argv)
 
-    app.aboutToQuit.connect(controller.cleanup)
-    sys.exit(app.exec_())
+	controller = AppController()
+	controller.window.show()
+	controller.start()
+
+	app.aboutToQuit.connect(controller.stop)
+
+	sys.exit(app.exec_())
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+	main()
