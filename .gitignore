@@ -4,3 +4,5 @@ __pycache__
 .venv
 references/pojedyncze
 references/segmenty
+settings.txt
+log.txt
