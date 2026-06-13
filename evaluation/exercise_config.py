@@ -69,7 +69,7 @@ EXERCISE_CONFIG = {
 		},
 		"segmenter": {
 			"motion_start_threshold": 0.25,
-			"stillness_threshold": 0.25,
+			"stillness_threshold": 0.15,
 			"stillness_frames": 6,
 			"min_duration_sec": 0.45,
 			"max_duration_sec": 5.0,
@@ -102,7 +102,7 @@ EXERCISE_CONFIG = {
 		},
 		"segmenter": {
 			"motion_start_threshold": 0.25,
-			"stillness_threshold": 0.25,
+			"stillness_threshold": 0.15,
 			"stillness_frames": 6,
 			"min_duration_sec": 0.55,
 			"max_duration_sec": 6.0,

@@ -7,12 +7,19 @@ STATE_FINISHED = "finished"
 DEFAULT_COOLDOWN_SEC = 0.6
 MIN_VALID_FRAMES = 5
 MIN_TOTAL_MOTION = 0.08
-START_CONFIRMATION_FRAMES = 1
+
+EX_FRAMES = 2
 MOTION_DEADZONE = 0.02
 
 DEFAULT_POST_PEAK_FRAMES = 10
 DEFAULT_POST_PEAK_DROP_RATIO = 0.30
 DEFAULT_POST_PEAK_MIN_DURATION_SEC = 0.75
+
+LEG_EXERCISES = ("step_only", "full")
+
+DEFAULT_MIN_LEG_DISPLACEMENT = 0.10
+DEFAULT_RETURN_TO_START_THRESHOLD = 0.06
+DEFAULT_RETURN_TO_START_FRAMES = 3
 
 
 class RepetitionSegmenter:
@@ -33,6 +40,11 @@ class RepetitionSegmenter:
 		self.start_confirmation_count = 0
 		self.peak_motion_signal = 0.0
 		self.frames_after_peak = 0
+		self.has_clear_motion = False
+
+		self.start_front_ankle_displacement = None
+		self.max_front_ankle_displacement_delta = 0.0
+		self.return_to_start_count = 0
 
 	def compute_motion_signal(self, side_features):
 		if not side_features:
@@ -55,10 +67,7 @@ class RepetitionSegmenter:
 		if self.exercise_type == "arms_only":
 			return wv + wc
 
-		if self.exercise_type == "step_only":
-			return av + 0.5 * adc
-
-		return 0.5 * wv + 0.5 * av
+		return av + 0.5 * adc
 
 	def update(self, timestamp, side_features, front_features=None):
 		if timestamp is None:
@@ -86,9 +95,11 @@ class RepetitionSegmenter:
 			else:
 				self.start_confirmation_count = 0
 
-			if self.start_confirmation_count >= START_CONFIRMATION_FRAMES:
+			if self.start_confirmation_count >= EX_FRAMES:
 				self.state = STATE_RECORDING_ATTACK
 				self.start_time = timestamp
+				self.has_clear_motion = True
+				self.start_front_ankle_displacement = self._get_front_ankle_displacement(side_features)
 				self.records.append(self._record(timestamp, side_features, front_features, signal))
 				return "started"
 
@@ -96,41 +107,109 @@ class RepetitionSegmenter:
 
 		self.records.append(self._record(timestamp, side_features, front_features, signal))
 
-		if signal <= self.segmenter_config["stillness_threshold"]:
-			self.stillness_count += 1
-		else:
-			self.stillness_count = max(0, self.stillness_count - 1)
-
 		duration = timestamp - self.start_time
 
 		if duration >= self.segmenter_config["max_duration_sec"]:
 			return self._finish(timestamp, "timeout")
 
-		if duration >= self.segmenter_config["min_duration_sec"]:
-			if self.stillness_count >= self.segmenter_config["stillness_frames"]:
-				return self._finish(timestamp, "stillness")
+		if signal >= self.segmenter_config["motion_start_threshold"]:
+			self.has_clear_motion = True
 
-			post_peak_enabled = self.segmenter_config.get("post_peak_enabled", True)
-			post_peak_frames = self.segmenter_config.get("post_peak_frames", DEFAULT_POST_PEAK_FRAMES)
-			post_peak_drop_ratio = self.segmenter_config.get("post_peak_drop_ratio", DEFAULT_POST_PEAK_DROP_RATIO)
-			post_peak_min_duration = self.segmenter_config.get(
-				"post_peak_min_duration_sec",
-				DEFAULT_POST_PEAK_MIN_DURATION_SEC,
-			)
+		if signal <= self.segmenter_config["stillness_threshold"]:
+			self.stillness_count += 1
+		else:
+			self.stillness_count = 0
 
-			has_clear_peak = self.peak_motion_signal >= self.segmenter_config["motion_start_threshold"]
-			has_enough_frames_after_peak = self.frames_after_peak >= post_peak_frames
-			has_dropped_after_peak = signal <= self.peak_motion_signal * post_peak_drop_ratio
-			has_enough_duration_for_post_peak = duration >= post_peak_min_duration
+		if duration < self.segmenter_config["min_duration_sec"]:
+			return None
 
-			if (
-					post_peak_enabled
-					and has_clear_peak
-					and has_enough_frames_after_peak
-					and has_dropped_after_peak
-					and has_enough_duration_for_post_peak
-			):
-				return self._finish(timestamp, "post_peak")
+		if self.exercise_type in LEG_EXERCISES:
+			return self._update_leg_exercise(timestamp, side_features)
+
+		return self._update_arms_only(timestamp, signal, duration)
+
+	def _update_leg_exercise(self, timestamp, side_features):
+		if not self.has_clear_motion:
+			return None
+
+		if self._has_returned_to_start(side_features):
+			return self._finish(timestamp, "return_to_start")
+
+		return None
+
+	def _has_returned_to_start(self, side_features):
+		current_displacement = self._get_front_ankle_displacement(side_features)
+
+		if current_displacement is None:
+			self.return_to_start_count = 0
+			return False
+
+		if self.start_front_ankle_displacement is None:
+			self.start_front_ankle_displacement = current_displacement
+			return False
+
+		displacement_delta = abs(current_displacement - self.start_front_ankle_displacement)
+
+		if displacement_delta > self.max_front_ankle_displacement_delta:
+			self.max_front_ankle_displacement_delta = displacement_delta
+
+		min_leg_displacement = self.segmenter_config.get(
+			"min_peak_displacement",
+			DEFAULT_MIN_LEG_DISPLACEMENT,
+		)
+		return_to_start_threshold = self.segmenter_config.get(
+			"return_displacement_threshold",
+			DEFAULT_RETURN_TO_START_THRESHOLD,
+		)
+		return_to_start_frames = self.segmenter_config.get(
+			"return_zone_frames",
+			DEFAULT_RETURN_TO_START_FRAMES,
+		)
+
+		if self.max_front_ankle_displacement_delta < min_leg_displacement:
+			self.return_to_start_count = 0
+			return False
+
+		if displacement_delta <= return_to_start_threshold:
+			self.return_to_start_count += 1
+		else:
+			self.return_to_start_count = 0
+
+		return self.return_to_start_count >= return_to_start_frames
+
+	def _get_front_ankle_displacement(self, side_features):
+		value = side_features.get("front_ankle_displacement")
+
+		if value is None:
+			return None
+
+		return float(value)
+
+	def _update_arms_only(self, timestamp, signal, duration):
+		if self.stillness_count >= self.segmenter_config["stillness_frames"]:
+			return self._finish(timestamp, "stillness")
+
+		post_peak_enabled = self.segmenter_config.get("post_peak_enabled", True)
+		post_peak_frames = self.segmenter_config.get("post_peak_frames", DEFAULT_POST_PEAK_FRAMES)
+		post_peak_drop_ratio = self.segmenter_config.get("post_peak_drop_ratio", DEFAULT_POST_PEAK_DROP_RATIO)
+		post_peak_min_duration = self.segmenter_config.get(
+			"post_peak_min_duration_sec",
+			DEFAULT_POST_PEAK_MIN_DURATION_SEC,
+		)
+
+		has_clear_peak = self.peak_motion_signal >= self.segmenter_config["motion_start_threshold"]
+		has_enough_frames_after_peak = self.frames_after_peak >= post_peak_frames
+		has_dropped_after_peak = signal <= self.peak_motion_signal * post_peak_drop_ratio
+		has_enough_duration_for_post_peak = duration >= post_peak_min_duration
+
+		if (
+				post_peak_enabled
+				and has_clear_peak
+				and has_enough_frames_after_peak
+				and has_dropped_after_peak
+				and has_enough_duration_for_post_peak
+		):
+			return self._finish(timestamp, "post_peak")
 
 		return None
 
@@ -151,7 +230,12 @@ class RepetitionSegmenter:
 		}
 
 	def _record(self, timestamp, side_features, front_features, signal):
-		return {"timestamp": timestamp, "side": side_features, "front": front_features, "motion_signal": signal}
+		return {
+			"timestamp": timestamp,
+			"side": side_features,
+			"front": front_features,
+			"motion_signal": signal,
+		}
 
 	def _is_valid_repetition(self):
 		if len(self.records) < MIN_VALID_FRAMES:
@@ -161,6 +245,15 @@ class RepetitionSegmenter:
 
 		if total_motion < MIN_TOTAL_MOTION:
 			return False
+
+		if self.exercise_type in LEG_EXERCISES:
+			min_leg_displacement = self.segmenter_config.get(
+				"min_peak_displacement",
+				DEFAULT_MIN_LEG_DISPLACEMENT,
+			)
+
+			if self.max_front_ankle_displacement_delta < min_leg_displacement:
+				return False
 
 		return True
 
