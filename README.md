@@ -19,5 +19,4 @@
 
 - wybór ćwiczenia
 - komunikaty głosowe
-- poprawa wykrywania ćwiczeń
 - Gruby pasek postępu zmiast debugera
