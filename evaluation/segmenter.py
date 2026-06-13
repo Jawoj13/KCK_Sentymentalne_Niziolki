@@ -8,7 +8,7 @@ DEFAULT_COOLDOWN_SEC = 0.6
 MIN_VALID_FRAMES = 5
 MIN_TOTAL_MOTION = 0.08
 
-EX_FRAMES = 2
+START_CONFIRMATION_FRAMES = 2
 MOTION_DEADZONE = 0.02
 
 DEFAULT_POST_PEAK_FRAMES = 10
@@ -95,7 +95,7 @@ class RepetitionSegmenter:
 			else:
 				self.start_confirmation_count = 0
 
-			if self.start_confirmation_count >= EX_FRAMES:
+			if self.start_confirmation_count >= START_CONFIRMATION_FRAMES:
 				self.state = STATE_RECORDING_ATTACK
 				self.start_time = timestamp
 				self.has_clear_motion = True
