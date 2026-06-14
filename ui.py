@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout,
                              QLineEdit, QPushButton, QGroupBox,
-                             QTextEdit, QStackedWidget, QComboBox, QProgressBar)
+                             QTextEdit, QStackedWidget, QComboBox, QProgressBar, QSlider)
 
 
 class MainWindow(QWidget):
@@ -99,9 +99,9 @@ class MainWindow(QWidget):
         progress_vbox.setContentsMargins(8, 18, 8, 8)
 
         self.series_progress_bar = QProgressBar()
-        self.series_progress_bar.setFixedHeight(45)  # Gruby pasek
+        self.series_progress_bar.setFixedHeight(45)
         self.series_progress_bar.setTextVisible(True)
-        self.series_progress_bar.setFormat("%v / %m")  # Pokazuje np. "2 / 5" zamiast procentów
+        self.series_progress_bar.setFormat("%v / %m")
         self.series_progress_bar.setStyleSheet("""
             QProgressBar {
                 border: 2px solid #555;
@@ -153,7 +153,6 @@ class MainWindow(QWidget):
         logs_group.setLayout(logs_vbox)
         control_panel_layout.addWidget(logs_group)
 
-        # Wypychamy elementy do góry, jeśli jest wolne miejsce
         control_panel_layout.addStretch()
 
         self.btn_back_from_train = QPushButton("← Powrót do Menu")
@@ -182,6 +181,29 @@ class MainWindow(QWidget):
         title.setStyleSheet(
             "font-size: 24px; font-weight: bold; margin-top: 10px; margin-bottom: 25px; color: #2c3e50;")
         settings_layout.addWidget(title)
+
+        # --- SEKCJA GŁOŚNOŚCI ---
+        audio_group = QGroupBox("Asystent Głosowy (Audio)")
+        audio_vbox = QVBoxLayout()
+        audio_hbox = QHBoxLayout()
+
+        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_label = QLabel("100%")
+        self.volume_label.setFixedWidth(40)
+        self.volume_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+
+        self.test_audio_btn = QPushButton("Testuj dźwięk (SUCCESS)")
+        self.test_audio_btn.setStyleSheet("padding: 8px; font-weight: bold; background-color: #f39c12; color: white;")
+
+        audio_hbox.addWidget(QLabel("Głośność:"))
+        audio_hbox.addWidget(self.volume_slider)
+        audio_hbox.addWidget(self.volume_label)
+
+        audio_vbox.addLayout(audio_hbox)
+        audio_vbox.addWidget(self.test_audio_btn)
+        audio_group.setLayout(audio_vbox)
+        settings_layout.addWidget(audio_group)
 
         # SEKCJA KAMERY
         conn_group = QGroupBox("Połączenie z drugą kamerą (Telefon)")
@@ -344,7 +366,9 @@ class MainWindow(QWidget):
 
         exercise_type = result.get("exercise_type", "unknown")
         score = result.get("score", "N/A")
-        main_feedback = result.get("main_feedback")
+        if score is None:
+            score = "N/A"
+
         errors = result.get("errors", [])
 
         lines = [
@@ -356,7 +380,10 @@ class MainWindow(QWidget):
 
         if errors:
             for e in errors:
-                lines.append(f"- {e.get('message', 'Brak komunikatu')}")
+                if isinstance(e, dict) and "message" in e:
+                    lines.append(f"- {e['message']}")
+                else:
+                    lines.append(f"- Niezidentyfikowany błąd: {e}")
         else:
             lines.append("- Brak (ruch poprawny!)")
 

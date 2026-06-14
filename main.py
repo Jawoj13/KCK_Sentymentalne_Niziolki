@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 
 from PyQt5.QtWidgets import QApplication
 
+# Usunięto QtMultimedia, wstawiono pygame
+import pygame
+
 from backend import CameraWorker, SyncInferenceWorker
 from ui import MainWindow
 
@@ -20,7 +23,8 @@ def load_settings():
         "ip_camera": "http://192.168.1.14:8080/video",
         "log_retention_days": 30,
         "summary_frequency": 5,
-        "exercise_type": "full"  # Zapewnienie domyślnej wartości dla ćwiczenia
+        "exercise_type": "full",
+        "audio_volume": 100  # Domyślna głośność to 100%
     }
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -83,6 +87,7 @@ class AppController:
         retention_days = self.settings.get("log_retention_days", 30)
         self.summary_frequency = self.settings.get("summary_frequency", 5)
         exercise_type = self.settings.get("exercise_type", "full")
+        self.audio_volume = self.settings.get("audio_volume", 100)
 
         clean_old_logs(retention_days)
 
@@ -93,10 +98,24 @@ class AppController:
         if hasattr(self.window, "summary_input"):
             self.window.summary_input.setText(str(self.summary_frequency))
 
-        # Ustawienie wybranego ćwiczenia z pliku settings
         index = self.window.exercise_combo.findData(exercise_type)
         if index >= 0:
             self.window.exercise_combo.setCurrentIndex(index)
+
+        # --- KONFIGURACJA ODTWARZACZA PYGAME ---
+        try:
+            pygame.mixer.init()
+            # Pygame używa skali 0.0 do 1.0 dla głośności
+            pygame.mixer.music.set_volume(self.audio_volume / 100.0)
+        except Exception as e:
+            print(f"Błąd inicjalizacji audio: {e}")
+
+        self.window.volume_slider.setValue(self.audio_volume)
+        self.window.volume_label.setText(f"{self.audio_volume}%")
+
+        # Podpięcie sygnałów UI do metod
+        self.window.volume_slider.valueChanged.connect(self.on_volume_changed)
+        self.window.test_audio_btn.clicked.connect(self.test_audio_playback)
 
         # --- KONFIGURACJA PASKA POSTĘPU ---
         self.window.series_progress_bar.setMaximum(self.summary_frequency)
@@ -110,8 +129,6 @@ class AppController:
         self.queue_b = queue.Queue(maxsize=2)
 
         self.inference_worker = SyncInferenceWorker(self.queue_a, self.queue_b)
-
-        # Przekazanie typu ćwiczenia do workera
         self.inference_worker.exercise_type = exercise_type
 
         self.inference_worker.frames_ready.connect(self.window.update_both_labels)
@@ -128,14 +145,41 @@ class AppController:
         if hasattr(self.window, "save_settings_btn"):
             self.window.save_settings_btn.clicked.connect(self.save_current_settings)
 
+    def on_volume_changed(self, value):
+        """Aktualizuje etykietę i głośność w locie (Pygame: 0.0 - 1.0)"""
+        self.window.volume_label.setText(f"{value}%")
+        self.audio_volume = value
+        try:
+            pygame.mixer.music.set_volume(value / 100.0)
+        except Exception:
+            pass
+
+    def test_audio_playback(self):
+        """Odtwarza plik SUCCESS za pomocą Pygame"""
+        base_audio_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "audio")
+        wav_path = os.path.join(base_audio_path, "SUCCESS.wav")
+        mp3_path = os.path.join(base_audio_path, "SUCCESS.mp3")
+
+        audio_to_play = wav_path if os.path.exists(wav_path) else mp3_path if os.path.exists(mp3_path) else None
+
+        if audio_to_play:
+            print(f"🎵 [TEST PYGAME] Odtwarzam dźwięk: {audio_to_play} (Głośność: {self.audio_volume}%)")
+            try:
+                pygame.mixer.music.load(audio_to_play)
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"❌ [AUDIO BŁĄD] Nie udało się odtworzyć pliku: {e}")
+        else:
+            print(
+                "⚠️ [TEST BRAK PLIKU] Upewnij się, że posiadasz plik SUCCESS.mp3 lub SUCCESS.wav w folderze resources/audio/")
+
     def save_current_settings(self):
         self.settings["ip_camera"] = self.window.ip_input.text()
 
-        # Pobranie typu ćwiczenia z ComboBox
         selected_exercise = self.window.exercise_combo.currentData()
         self.settings["exercise_type"] = selected_exercise
+        self.settings["audio_volume"] = self.window.volume_slider.value()
 
-        # Natychmiastowa aktualizacja w dziale inferencji
         if hasattr(self, 'inference_worker'):
             self.inference_worker.exercise_type = selected_exercise
 
@@ -143,12 +187,10 @@ class AppController:
             self.settings["log_retention_days"] = int(self.window.retention_input.text())
             self.settings["summary_frequency"] = int(self.window.summary_input.text())
             self.summary_frequency = self.settings["summary_frequency"]
-
-            # Zmiana skali paska po edycji ustawień
             self.window.series_progress_bar.setMaximum(self.summary_frequency)
-
         except ValueError:
             pass
+
         save_settings(self.settings)
 
     def connect_ip_camera(self):
@@ -166,15 +208,12 @@ class AppController:
         if not result:
             return
 
-        # 1. Błyskawiczny podgląd na bieżące (pojedyncze) powtórzenie w UI
         formatted_single_rep = self.window.format_repetition_details(result)
         self.window.result_details_console.setPlainText(formatted_single_rep)
 
-        # 2. Dodajemy do bufora i aktualizujemy pasek
         self.repetition_buffer.append(result)
         self.window.series_progress_bar.setValue(len(self.repetition_buffer))
 
-        # 3. Jeśli zebraliśmy wystarczająco dużo powtórzeń, robimy podsumowanie
         if len(self.repetition_buffer) >= self.summary_frequency:
             self.generate_and_save_summary()
 
@@ -182,26 +221,49 @@ class AppController:
         if not self.repetition_buffer:
             return
 
-        # --- OBLICZENIA DANYCH DO PODSUMOWANIA ---
-        scores = [r.get("score", 0.0) for r in self.repetition_buffer]
+        scores = [r.get("score", 0.0) for r in self.repetition_buffer if isinstance(r.get("score"), (int, float))]
         avg_score = round(sum(scores) / len(scores), 2) if scores else 0.0
 
-        all_errors = []
+        all_error_codes = []
+        code_to_message = {}
+
         for r in self.repetition_buffer:
             for e in r.get("errors", []):
-                # Pobieramy treść błędu
-                all_errors.append(e.get("message", "Nieznany błąd"))
+                if isinstance(e, dict) and "code" in e:
+                    code = e["code"]
+                    all_error_codes.append(code)
+                    if "message" in e:
+                        code_to_message[code] = e["message"]
 
-        if all_errors:
-            # Wyciąga najczęściej występujący string z listy błędów
-            most_common_error = Counter(all_errors).most_common(1)[0][0]
+        most_common_code = "SUCCESS"
+        most_common_error = "Brak większych błędów - świetna robota!"
+
+        if all_error_codes:
+            most_common_code = Counter(all_error_codes).most_common(1)[0][0]
+            most_common_error = code_to_message.get(most_common_code, "Błąd bez komunikatu.")
+
+        # --- ODTWARZANIE AUDIO BŁĘDU (PYGAME) ---
+        base_audio_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "audio")
+
+        wav_path = os.path.join(base_audio_path, f"{most_common_code}.wav")
+        mp3_path = os.path.join(base_audio_path, f"{most_common_code}.mp3")
+
+        audio_to_play = wav_path if os.path.exists(wav_path) else mp3_path if os.path.exists(mp3_path) else None
+
+        if audio_to_play:
+            print(f"🎵 [AUDIO] Odtwarzam: {audio_to_play} (Głośność: {self.audio_volume}%)")
+            try:
+                pygame.mixer.music.load(audio_to_play)
+                pygame.mixer.music.play()
+            except Exception as e:
+                print(f"❌ [AUDIO BŁĄD] {e}")
         else:
-            most_common_error = "Brak większych błędów - świetna robota!"
+            print(f"⚠️ [AUDIO BRAK] Nie znaleziono pliku dla błędu: {most_common_code}")
 
+        # --- AKTUALIZACJA UI I ZAPIS ---
         exercise_type = self.repetition_buffer[-1].get("exercise_type", "Nieznane")
         count = len(self.repetition_buffer)
 
-        # --- BUDOWANIE TEKSTU ---
         summary_text = (
             f"➤ Seria: {count} powt. | Ćwiczenie: {exercise_type}\n"
             f"➤ Średni wynik techniki: {avg_score} pkt\n"
@@ -209,10 +271,8 @@ class AppController:
             f"--------------------------------------------------"
         )
 
-        # Aktualizacja okna asystenta
         self.window.log_console.append(summary_text)
 
-        # Zapis logów
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"=== [{now_str}] ZESTAWIENIE SERII ===\n{summary_text}\n\n"
 
@@ -222,16 +282,20 @@ class AppController:
         except Exception as e:
             print(f"Nie udało się zapisać do pliku: {e}")
 
-        # Resetujemy bufor przed kolejną serią oraz zerujemy pasek postępu
         self.repetition_buffer.clear()
         self.window.series_progress_bar.setValue(0)
 
     def cleanup(self):
         self.save_current_settings()
 
-        # Wyrzucamy niedokończoną serię do pliku, żeby nie ucięło danych na sam koniec
         if self.repetition_buffer:
             self.generate_and_save_summary()
+
+        # Zamykamy moduł audio przy wychodzeniu z aplikacji
+        try:
+            pygame.mixer.quit()
+        except Exception:
+            pass
 
         self.worker_a.stop()
         if self.worker_b is not None:
