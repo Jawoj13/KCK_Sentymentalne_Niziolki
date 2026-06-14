@@ -19,7 +19,8 @@ def load_settings():
     default_settings = {
         "ip_camera": "http://192.168.1.14:8080/video",
         "log_retention_days": 30,
-        "summary_frequency": 5
+        "summary_frequency": 5,
+        "exercise_type": "full"  # Zapewnienie domyślnej wartości dla ćwiczenia
     }
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -81,6 +82,7 @@ class AppController:
         self.settings = load_settings()
         retention_days = self.settings.get("log_retention_days", 30)
         self.summary_frequency = self.settings.get("summary_frequency", 5)
+        exercise_type = self.settings.get("exercise_type", "full")
 
         clean_old_logs(retention_days)
 
@@ -91,6 +93,11 @@ class AppController:
         if hasattr(self.window, "summary_input"):
             self.window.summary_input.setText(str(self.summary_frequency))
 
+        # Ustawienie wybranego ćwiczenia z pliku settings
+        index = self.window.exercise_combo.findData(exercise_type)
+        if index >= 0:
+            self.window.exercise_combo.setCurrentIndex(index)
+
         # --- BUFOR NA PODSUMOWANIA ---
         self.repetition_buffer = []
 
@@ -99,6 +106,10 @@ class AppController:
         self.queue_b = queue.Queue(maxsize=2)
 
         self.inference_worker = SyncInferenceWorker(self.queue_a, self.queue_b)
+
+        # Przekazanie typu ćwiczenia do workera (wymaga uwzględnienia "self.exercise_type" wewnątrz SyncInferenceWorker)
+        self.inference_worker.exercise_type = exercise_type
+
         self.inference_worker.frames_ready.connect(self.window.update_both_labels)
         self.inference_worker.evaluation_ready.connect(self.handle_evaluation_result)
         self.inference_worker.start()
@@ -115,6 +126,15 @@ class AppController:
 
     def save_current_settings(self):
         self.settings["ip_camera"] = self.window.ip_input.text()
+
+        # Pobranie typu ćwiczenia z ComboBox
+        selected_exercise = self.window.exercise_combo.currentData()
+        self.settings["exercise_type"] = selected_exercise
+
+        # Natychmiastowa aktualizacja w dziale inferencji
+        if hasattr(self, 'inference_worker'):
+            self.inference_worker.exercise_type = selected_exercise
+
         try:
             self.settings["log_retention_days"] = int(self.window.retention_input.text())
             self.settings["summary_frequency"] = int(self.window.summary_input.text())

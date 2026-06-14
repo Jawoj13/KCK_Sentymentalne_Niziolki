@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout,
                              QLineEdit, QPushButton, QGroupBox,
-                             QTextEdit, QStackedWidget)
+                             QTextEdit, QStackedWidget, QComboBox)
 
 
 class MainWindow(QWidget):
@@ -200,6 +200,22 @@ class MainWindow(QWidget):
 
         conn_group.setLayout(conn_vbox)
         settings_layout.addWidget(conn_group)
+
+        # SEKCJA WYBORU ĆWICZENIA
+        exercise_group = QGroupBox("Rodzaj analizowanego ćwiczenia")
+        exercise_vbox = QVBoxLayout()
+
+        self.exercise_combo = QComboBox()
+        self.exercise_combo.setStyleSheet("padding: 8px; font-size: 14px;")
+        # addItem(Tytuł dla użytkownika, Wartość w kodzie/ustawieniach)
+        self.exercise_combo.addItem("Tylko kroki (steps_only)", "step_only")
+        self.exercise_combo.addItem("Tylko ramiona (arms_only)", "arms_only")
+        self.exercise_combo.addItem("Pełne (full)", "full")
+
+        exercise_vbox.addWidget(QLabel("Wybierz ćwiczenie:"))
+        exercise_vbox.addWidget(self.exercise_combo)
+        exercise_group.setLayout(exercise_vbox)
+        settings_layout.addWidget(exercise_group)
 
         # SEKCJA LOGÓW I PODSUMOWAŃ
         log_group = QGroupBox("Historia ćwiczeń i Podsumowania (log.txt)")
