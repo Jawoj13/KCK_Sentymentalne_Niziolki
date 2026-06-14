@@ -98,6 +98,10 @@ class AppController:
         if index >= 0:
             self.window.exercise_combo.setCurrentIndex(index)
 
+        # --- KONFIGURACJA PASKA POSTĘPU ---
+        self.window.series_progress_bar.setMaximum(self.summary_frequency)
+        self.window.series_progress_bar.setValue(0)
+
         # --- BUFOR NA PODSUMOWANIA ---
         self.repetition_buffer = []
 
@@ -107,7 +111,7 @@ class AppController:
 
         self.inference_worker = SyncInferenceWorker(self.queue_a, self.queue_b)
 
-        # Przekazanie typu ćwiczenia do workera (wymaga uwzględnienia "self.exercise_type" wewnątrz SyncInferenceWorker)
+        # Przekazanie typu ćwiczenia do workera
         self.inference_worker.exercise_type = exercise_type
 
         self.inference_worker.frames_ready.connect(self.window.update_both_labels)
@@ -139,6 +143,10 @@ class AppController:
             self.settings["log_retention_days"] = int(self.window.retention_input.text())
             self.settings["summary_frequency"] = int(self.window.summary_input.text())
             self.summary_frequency = self.settings["summary_frequency"]
+
+            # Zmiana skali paska po edycji ustawień
+            self.window.series_progress_bar.setMaximum(self.summary_frequency)
+
         except ValueError:
             pass
         save_settings(self.settings)
@@ -162,8 +170,9 @@ class AppController:
         formatted_single_rep = self.window.format_repetition_details(result)
         self.window.result_details_console.setPlainText(formatted_single_rep)
 
-        # 2. Dodajemy do bufora
+        # 2. Dodajemy do bufora i aktualizujemy pasek
         self.repetition_buffer.append(result)
+        self.window.series_progress_bar.setValue(len(self.repetition_buffer))
 
         # 3. Jeśli zebraliśmy wystarczająco dużo powtórzeń, robimy podsumowanie
         if len(self.repetition_buffer) >= self.summary_frequency:
@@ -213,8 +222,9 @@ class AppController:
         except Exception as e:
             print(f"Nie udało się zapisać do pliku: {e}")
 
-        # Resetujemy bufor przed kolejną serią
+        # Resetujemy bufor przed kolejną serią oraz zerujemy pasek postępu
         self.repetition_buffer.clear()
+        self.window.series_progress_bar.setValue(0)
 
     def cleanup(self):
         self.save_current_settings()

@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout,
                              QLineEdit, QPushButton, QGroupBox,
-                             QTextEdit, QStackedWidget, QComboBox)
+                             QTextEdit, QStackedWidget, QComboBox, QProgressBar)
 
 
 class MainWindow(QWidget):
@@ -92,58 +92,79 @@ class MainWindow(QWidget):
         control_panel_layout = QVBoxLayout()
         control_panel_layout.setAlignment(Qt.AlignTop)
 
-        debug_group = QGroupBox("Debug segmentera")
-        debug_group.setMinimumHeight(335)
-        debug_group.setMaximumHeight(360)
+        # --- SEKCJA: PASEK POSTĘPU ---
+        progress_group = QGroupBox("Postęp bieżącej serii")
+        progress_group.setStyleSheet("font-weight: bold; font-size: 14px;")
+        progress_vbox = QVBoxLayout()
+        progress_vbox.setContentsMargins(8, 18, 8, 8)
 
-        debug_vbox = QVBoxLayout()
-        debug_vbox.setContentsMargins(8, 18, 8, 8)
+        self.series_progress_bar = QProgressBar()
+        self.series_progress_bar.setFixedHeight(45)  # Gruby pasek
+        self.series_progress_bar.setTextVisible(True)
+        self.series_progress_bar.setFormat("%v / %m")  # Pokazuje np. "2 / 5" zamiast procentów
+        self.series_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #555;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 18px;
+                font-weight: bold;
+                color: #ffffff;
+                background-color: #1f2933;
+            }
+            QProgressBar::chunk {
+                background-color: #2ecc71;
+                border-radius: 6px;
+            }
+        """)
 
-        self.debug_console = QTextEdit()
-        self.debug_console.setReadOnly(True)
-        self.debug_console.setFixedHeight(285)
-        self.debug_console.setLineWrapMode(QTextEdit.NoWrap)
-        self.debug_console.setStyleSheet(
-            "font-family: monospace; font-size: 12px; background-color: #111; color: #00ff88;"
-        )
+        progress_vbox.addWidget(self.series_progress_bar)
+        progress_group.setLayout(progress_vbox)
+        control_panel_layout.addWidget(progress_group)
 
-        debug_vbox.addWidget(self.debug_console)
-        debug_group.setLayout(debug_vbox)
-
-        control_panel_layout.addWidget(debug_group)
+        # SZCZEGÓŁY POWTÓRZENIA
         result_group = QGroupBox("Szczegóły bieżącego powtórzenia")
+        result_group.setStyleSheet("font-weight: bold; font-size: 14px;")
         result_vbox = QVBoxLayout()
 
         self.result_details_console = QTextEdit()
         self.result_details_console.setReadOnly(True)
-        self.result_details_console.setMinimumHeight(210)
+        self.result_details_console.setMinimumHeight(280)
         self.result_details_console.setStyleSheet(
-            "font-family: monospace; font-size: 12px; background-color: #1f2933; color: #f5f5f5;"
+            "font-family: monospace; font-size: 16px; background-color: #1f2933; color: #f5f5f5; padding: 10px;"
         )
 
         result_vbox.addWidget(self.result_details_console)
         result_group.setLayout(result_vbox)
         control_panel_layout.addWidget(result_group)
 
+        # LOGI ASYSTENTA
         logs_group = QGroupBox("Komunikaty systemu (Asystent - Podsumowania Serii)")
+        logs_group.setStyleSheet("font-weight: bold; font-size: 14px;")
         logs_vbox = QVBoxLayout()
+
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
+        self.log_console.setMinimumHeight(350)
         self.log_console.setPlaceholderText("Tutaj pojawią się zagregowane podsumowania serii powtórzeń...")
-        self.log_console.setStyleSheet("font-size: 14px;")
+        self.log_console.setStyleSheet("font-size: 18px; padding: 10px;")
+
         logs_vbox.addWidget(self.log_console)
         logs_group.setLayout(logs_vbox)
         control_panel_layout.addWidget(logs_group)
 
+        # Wypychamy elementy do góry, jeśli jest wolne miejsce
+        control_panel_layout.addStretch()
+
         self.btn_back_from_train = QPushButton("← Powrót do Menu")
         self.btn_back_from_train.setStyleSheet(
-            "padding: 10px; background-color: #e74c3c; color: white; font-weight: bold;")
+            "padding: 15px; font-size: 16px; background-color: #e74c3c; color: white; font-weight: bold;")
         self.btn_back_from_train.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
         control_panel_layout.addWidget(self.btn_back_from_train)
 
         control_panel_widget = QWidget()
-        control_panel_widget.setMinimumWidth(500)
-        control_panel_widget.setMaximumWidth(620)
+        control_panel_widget.setMinimumWidth(600)
+        control_panel_widget.setMaximumWidth(800)
         control_panel_widget.setLayout(control_panel_layout)
 
         training_layout.addLayout(video_area_layout, stretch=1)
@@ -207,8 +228,8 @@ class MainWindow(QWidget):
 
         self.exercise_combo = QComboBox()
         self.exercise_combo.setStyleSheet("padding: 8px; font-size: 14px;")
-        # addItem(Tytuł dla użytkownika, Wartość w kodzie/ustawieniach)
-        self.exercise_combo.addItem("Tylko kroki (steps_only)", "step_only")
+
+        self.exercise_combo.addItem("Tylko kroki (step_only)", "step_only")
         self.exercise_combo.addItem("Tylko ramiona (arms_only)", "arms_only")
         self.exercise_combo.addItem("Pełne (full)", "full")
 
@@ -316,7 +337,6 @@ class MainWindow(QWidget):
 
     def update_debug_status(self, text):
         self.status_banner.setText("STATUS: Analiza aktywna")
-        self.debug_console.setPlainText(text)
 
     def format_repetition_details(self, result):
         if not result:
